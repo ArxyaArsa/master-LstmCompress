@@ -29,7 +29,7 @@ class ArithmeticCompress():
         self.bitout = arithmeticcoding.BitOutputStream(open(self.outputfile, "wb"))
         #self.inp.__enter__()
         #self.bitout.__enter__()
-        self.freqsTable = arithmeticcoding.SimpleFrequencyTable([0] * 257)
+        self.freqsTable = arithmeticcoding.SimpleFrequencyTable([1] * 257)
         self.encoder = arithmeticcoding.ArithmeticEncoder(32, self.bitout)
 
     def stop(self):
@@ -39,36 +39,37 @@ class ArithmeticCompress():
         #self.inp.__exit__()
         self.bitout.close()
 
-    ## Returns a frequency table based on the bytes in the given file.
-    ## Also contains an extra entry for symbol 256, whose frequency is set to 0.
-    #def get_frequencies(self, filepath):
-    #    freqs = arithmeticcoding.SimpleFrequencyTable([0] * 257)
-    #    with open(filepath, "rb") as input:
-    #        while True:
-    #            b = input.read(1)
-    #            if len(b) == 0:
-    #                break
-    #            freqs.increment(b[0])
-    #    return freqs
-
-    #def write_frequencies(self, bitout, freqs):
-    #    for i in range(256):
-    #        write_int(bitout, 32, freqs.get(i))
-
-    #def compress(self, freqs, inp, bitout):
-    #    enc = arithmeticcoding.ArithmeticEncoder(32, bitout)
-    #    while True:
-    #        symbol = inp.read(1)
-    #        if len(symbol) == 0:
-    #            break
-    #        enc.write(freqs, symbol[0])
-    #    enc.write(freqs, 256)  # EOF
-    #    enc.finish()  # Flush remaining code bits
-
     def compress_next(self, freq_pred, symbol_number):
+        self.encoder.write(self.freqsTable, symbol_number)
         # set new frequency for the symbol
         self.freqsTable.set(symbol_number, freq_pred)
-        self.encoder.write(self.freqsTable, symbol_number)
+
+
+## Returns a frequency table based on the bytes in the given file.
+## Also contains an extra entry for symbol 256, whose frequency is set to 0.
+# def get_frequencies(self, filepath):
+#    freqs = arithmeticcoding.SimpleFrequencyTable([0] * 257)
+#    with open(filepath, "rb") as input:
+#        while True:
+#            b = input.read(1)
+#            if len(b) == 0:
+#                break
+#            freqs.increment(b[0])
+#    return freqs
+
+# def write_frequencies(self, bitout, freqs):
+#    for i in range(256):
+#        write_int(bitout, 32, freqs.get(i))
+
+# def compress(self, freqs, inp, bitout):
+#    enc = arithmeticcoding.ArithmeticEncoder(32, bitout)
+#    while True:
+#        symbol = inp.read(1)
+#        if len(symbol) == 0:
+#            break
+#        enc.write(freqs, symbol[0])
+#    enc.write(freqs, 256)  # EOF
+#    enc.finish()  # Flush remaining code bits
 
 
 ## Writes an unsigned integer of the given bit width to the given stream.
