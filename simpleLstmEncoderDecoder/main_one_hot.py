@@ -130,7 +130,6 @@ class LstmEncoder:
                               #bias_constraint=keras.initializers.Zeros()
                               )
                   )
-        model.add(layers.Dense(self.num_features, activation='softmax'))
 
         model.summary()
         print("Inputs: {}".format(model.input_shape))
@@ -162,7 +161,7 @@ class LstmEncoder:
 
             output = model.fit(
                 x=inp,
-                y=tar,
+                #y=tar,
                 verbose=VERBOSE,
                 epochs=self.num_epochs,
                 batch_size=self.batch_size,
