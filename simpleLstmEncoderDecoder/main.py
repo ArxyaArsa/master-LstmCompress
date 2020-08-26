@@ -9,6 +9,7 @@ import numpy as np
 from datetime import datetime
 from tensorflow.python.keras import backend
 from arithmeticcompress import ArithmeticCompress
+from arithmeticdecompress import ArithmeticDecompress
 
 SEED = 7                        # universal seed for all
 VERBOSE = 0                     # verbosity for fitting function and more (+)
@@ -53,12 +54,10 @@ class LstmEncoder:
     total_series_len = -1       # will be set in load_data => len(data)
     time_steps = -1             # will be set in load_data => total_series_len//batch_size//num_features
     dictionary = []             # will be set in load_data => set(data)
-    dictionary_size = -1        # will be set in load_data => len(dictionary)
-    num_features = 1            # will be set after one hot encoding to dictionary_size
+    dictionary_size = 256       # set in stone!
+    num_features = 1            # set in stone! (was: will be set after one hot encoding to dictionary_size)
 
-    # file_to_compress = 'input_HMM_0.3_HMM_30_markovity'
-    file_to_compress = 'pdf'
-    base_training_on = 'loss'           # 'loss' or 'accuracy'
+    base_training_on = 'loss'   # 'loss' or 'accuracy' - unused actually
     from_file = ''              # will be set in __init__
     to_file = ''                # will be set in __init__
 
@@ -75,7 +74,7 @@ class LstmEncoder:
 
         self.total_series_len = len(self.data)
         self.dictionary = set(self.data)
-        self.dictionary_size = 256          # set to 256 because of byte reading; was: len(self.dictionary)
+        #self.dictionary_size = 256          # set to 256 because of byte reading; was: len(self.dictionary)
         #self.num_features = len(self.dictionary)
         self.time_steps = (self.total_series_len) // self.batch_size // self.num_features
         printt(f'Data loaded.')
@@ -111,13 +110,13 @@ class LstmEncoder:
         #data_array = [x / self.dictionary_size for x in self.data]
         data_array = list(self.data)
 
-        self.num_features = 1 #self.dictionary_size
+        #self.num_features = self.dictionary_size
 
         data_final = np.array(data_array).reshape((self.batch_size, self.time_steps, self.num_features))
 
         return data_final
 
-    def build_model(self, data_final):
+    def build_model(self, data_final=None):
         # debugging purposes
         # print(data_array, '\r\n', data_final)
 
@@ -139,8 +138,9 @@ class LstmEncoder:
         print("Outputs: {}".format(model.output_shape))
         #print("Actual input: {}".format(inputs_final.shape))
         #print("Actual output: {}".format(targets_final.shape))
-        print("Actual input: {}".format(data_final.shape))
-        print("Actual output: {}".format(data_final.shape))
+        if data_final is not None and data_final.any():
+            print("Actual input: {}".format(data_final.shape))
+            print("Actual output: {}".format(data_final.shape))
 
         # not using loss='sparse_categorical_crossentropy' since that's for non-hot encoded
         #model.compile(loss='categorical_crossentropy', metrics=['accuracy'])
@@ -155,7 +155,7 @@ class LstmEncoder:
 
     def compress(self, model, data_final):
         # written to txt file to check consecutive runs
-        # self.open_file_for_writing('data/txt2.txt')
+        self.open_file_for_writing('data/compressing.txt')
 
         now = datetime.now()
         training_time = now - now
@@ -227,6 +227,7 @@ class LstmEncoder:
 
             # written to txt file to check consecutive runs
             # self.wr.write(str(output.history['loss'][0]) + '\r\n')
+            self.wr.write(str(output) + '\r\n')
 
             #printt('Output history: ')
             #print(output.history)
@@ -240,6 +241,64 @@ class LstmEncoder:
         print('Training lasted: ', training_time)
         print('Compression lasted: ', compressing_time)
 
+    def decompress(self, model):
+        # written to txt file to check consecutive runs
+        self.open_file_for_writing('data/decompressing.txt')
+
+        now = datetime.now()
+        training_time = now - now
+        decompressing_time = now - now
+
+        dec = ArithmeticDecompress(self.from_file, self.to_file)
+        dec.start()
+
+        symbol1 = dec.decompress_next(DEFAULT_PROBABILITY_DISTRIBUTION_ESTIMATE_FIRST)
+        symbol2 = dec.decompress_next(DEFAULT_PROBABILITY_DISTRIBUTION_ESTIMATE_SECOND)
+
+        count = 0
+        while symbol2 != 256:
+            inp = np.array([symbol1]).reshape((self.batch_size, 1, self.num_features))
+            tar = np.array([symbol2]).reshape((self.batch_size, 1, self.num_features))
+
+            if VERBOSE > 1:
+                print('char == ', inp, ' -> ', tar)
+
+            start = datetime.now()
+
+            output = model.train_on_batch(
+                x=inp,
+                y=tar,
+                reset_metrics=False
+            )
+
+            # written to txt file to check consecutive runs
+            # self.wr.write(str(output.history['loss'][0]) + '\r\n')
+            self.wr.write(str(output) + '\r\n')
+
+            lasted = datetime.now() - start
+            training_time += lasted
+
+            start = datetime.now()
+
+            new_freq = output # [0] if self.base_training_on == 'loss' else output[1]
+            symbol_temp = dec.decompress_next(new_freq + 1)
+            symbol1 = symbol2
+            symbol2 = symbol_temp
+            # adjusting new frequency with +1 because decoder doesn't like zeros
+
+            lasted = datetime.now() - start
+            decompressing_time += lasted
+
+            count += 1
+            if count % 1000 == 0:
+                printt(f'Another 1000 bytes done...')
+
+        dec.stop()
+        printt('Done!')
+
+        print('Training lasted: ', training_time)
+        print('Decompression lasted: ', decompressing_time)
+
     def __init__(self, from_file, to_file):
         self.from_file = from_file
         self.to_file = to_file
@@ -247,12 +306,24 @@ class LstmEncoder:
 
 
 if __name__ == '__main__':
-    lstmEnc = LstmEncoder(
-        from_file=f'data/arbitrary/pdf.pdf',
-        to_file=f'data/compressed/compressed_pdf_loss.bin'
-    )
-    lstmEnc.load_data()
-    lstmEnc.print_hyperparams_and_data_info()
-    data = lstmEnc.prepare_data()
-    model = lstmEnc.build_model(data)
-    lstmEnc.compress(model, data)
+
+    op = 'decode'       # 'encode' or 'decode'
+
+    if op == 'encode':
+        lstmEnc = LstmEncoder(
+            from_file=f'data/arbitrary/pdf.pdf',
+            to_file=f'data/compressed/compressed_pdf_loss.bin'
+        )
+        lstmEnc.load_data()
+        lstmEnc.print_hyperparams_and_data_info()
+        data = lstmEnc.prepare_data()
+        model = lstmEnc.build_model(data)
+        lstmEnc.compress(model, data)
+    else:
+        lstmEnc = LstmEncoder(
+            from_file=f'data/compressed/compressed_pdf_loss.bin',
+            to_file=f'data/decompressed/pdf.pdf',
+        )
+        lstmEnc.print_hyperparams_and_data_info()
+        model = lstmEnc.build_model()
+        lstmEnc.decompress(model)

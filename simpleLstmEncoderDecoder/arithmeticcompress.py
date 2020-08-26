@@ -1,13 +1,12 @@
 #
-# Compression application using static arithmetic coding
+# Compression application using dynamic arithmetic coding
 #
-# Usage: python arithmeticcompress.py InputFile OutputFile
-# Then use the corresponding arithmetic-decompress.py application to recreate the original input file.
+# Then use the corresponding arithmeticdecompress.py application to recreate the original input file.
 # Note that the application uses an alphabet of 257 symbols - 256 symbols for the byte
 # values and 1 symbol for the EOF marker. The compressed file format starts with a list
 # of 256 symbol frequencies, and then followed by the arithmetic-coded data.
 #
-# Copyright (c) Project Nayuki
+# Original Copyright (c) Project Nayuki
 #
 # https://www.nayuki.io/page/reference-arithmetic-coding
 # https://github.com/nayuki/Reference-arithmetic-coding
@@ -33,8 +32,8 @@ class ArithmeticCompress():
         self.encoder = arithmeticcoding.ArithmeticEncoder(32, self.bitout)
 
     def stop(self):
-        self.freqsTable.set(256, 1)
         self.encoder.write(self.freqsTable, 256)  # EOF
+        self.freqsTable.set(256, 1)
         self.encoder.finish()  # Flush remaining code bits
         #self.inp.__exit__()
         self.bitout.close()
