@@ -83,8 +83,8 @@ class ArithmeticCoderBase:
 			raise ValueError("Cannot code symbol because total is too large")
 		
 		# Update range
-		newlow  = low + symlow  * range // total
-		newhigh = low + symhigh * range // total - 1
+		newlow  = int(low + symlow  * range // total)
+		newhigh = int(low + symhigh * range // total - 1)
 		self.low = newlow
 		self.high = newhigh
 		

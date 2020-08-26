@@ -45,7 +45,7 @@ class CustomCallback(keras.callbacks.Callback):
 
 
 class LstmEncoder:
-    data = [1]                  # will be appended in load_data; the one (1) in here is crucial!!!
+    data = [1]                   # will be set in load_data
     batch_size = 1              # also seems to be set in stone?
     num_epochs = 1              # set in stone!
     #trunc_bp_len = 8
@@ -55,13 +55,10 @@ class LstmEncoder:
     dictionary_size = -1        # will be set in load_data => len(dictionary)
     num_features = 1            # will be set after one hot encoding to dictionary_size
 
-    file_to_compress = 'input_HMM_0.3_HMM_10_markovity'
-    base_training_on = 'loss'           # 'loss' or 'accuracy'
-
     def load_data(self):
         #text = np.loadtxt(fname="data/space_separated/input501_4.txt", dtype=int, delimiter=" ")
         #self.data.extend(text)
-        with open(f'data/arbitrary/{self.file_to_compress}.txt', 'rb') as file:
+        with open('data/space_separated/input50001_4.txt', 'rb') as file:
             #temp_bytes = b''
             byte = file.read(1)
             while byte:
@@ -104,14 +101,24 @@ class LstmEncoder:
 
     def build_model(self):
 
-        data_array = [x / self.dictionary_size for x in self.data]
+        #inputs_array = self.data[:-1]
+        #targets_array = self.data[1:]
+        #inputs_encoded = self.one_hot_encode(inputs_array, self.dictionary_size)
+        #targets_encoded = self.one_hot_encode(targets_array, self.dictionary_size)
 
-        self.num_features = 1 #self.dictionary_size
+        data_array = self.data
+        data_encoded = self.one_hot_encode(data_array, 255)
 
-        data_final = np.array(data_array).reshape((self.batch_size, self.time_steps, self.num_features))
+        self.num_features = self.dictionary_size
 
-        # debugging purposes
-        # print(data_array, '\r\n', data_final)
+        #inputs = np.array(inputs_encoded)
+        #targets = np.array(targets_encoded)
+        #inputs_final = inputs.reshape((self.batch_size, self.time_steps, self.num_features))
+        #targets_final = targets.reshape((self.batch_size, self.time_steps, self.num_features))
+
+        data_final = np.array(data_encoded).reshape((self.batch_size, self.time_steps, self.num_features))
+
+        print(data_array, '\r\n', data_encoded, '\r\n', data_final)
 
         model = keras.Sequential(name='eNcoder-network')
         model.add(layers.LSTM(self.num_features,
@@ -123,8 +130,7 @@ class LstmEncoder:
                               #bias_constraint=keras.initializers.Zeros()
                               )
                   )
-        #model.add(layers.Dense(self.dictionary_size, activation='softmax', name='eNcoder-dense-1'))
-        #model.add(layers.Activation(activation='softmax'))
+        model.add(layers.Dense(self.num_features, activation='softmax'))
 
         model.summary()
         print("Inputs: {}".format(model.input_shape))
@@ -136,23 +142,15 @@ class LstmEncoder:
 
         # not using loss='sparse_categorical_crossentropy' since that's for non-hot encoded
         #model.compile(loss='categorical_crossentropy', metrics=['accuracy'])
-        model.compile(
-            optimizer='adam',
-            loss='sparse_categorical_crossentropy',
-            metrics=[tf.metrics.SparseCategoricalAccuracy()]
-        )
+        model.compile(optimizer='adam', loss='categorical_crossentropy')
 
         # written to txt file to check consecutive runs
         # self.open_file_for_writing('data/txt2.txt')
 
-        enc = ArithmeticCompress(f'data/compressed_{self.file_to_compress}_{self.base_training_on}.bin')
+        enc = ArithmeticCompress('data/compressed_50k.bin')
         enc.start()
 
         until = data_final.shape[1]
-        tenPercent = until // 10
-        onePercent = until // 100
-        tens = 0
-        ones = 0
         for i in range(until-1):
             inp = data_final[:,i,:].reshape((self.batch_size, 1, self.num_features))
             tar = data_final[:,i+1,:].reshape((self.batch_size, 1, self.num_features))
@@ -162,34 +160,17 @@ class LstmEncoder:
             if VERBOSE > 1:
                 print('char == ', inp, ' -> ', tar)
 
-            #output = model.fit(
-            #    x=inp,
-            #    y=tar,
-            #    verbose=VERBOSE,
-            #    epochs=self.num_epochs,
-            #    batch_size=self.batch_size,
-            #    #callbacks=[CustomCallback()],
-            #    shuffle=False
-            #)
-            #enc.compress_next(output.history['loss'][0], tf.argmax(tar[0][0]))
-
-            output = model.train_on_batch(
+            output = model.fit(
                 x=inp,
                 y=tar,
-                reset_metrics=False
+                verbose=VERBOSE,
+                epochs=self.num_epochs,
+                batch_size=self.batch_size,
+                #callbacks=[CustomCallback()],
+                shuffle=False
             )
 
-            new_freq = output[0] if self.base_training_on == 'loss' else output[1]
-            enc.compress_next(new_freq * 100 + 0.001, self.data[i+1])
-            # adjusting new frequency with 1 because encoder doesn't like zeros
-
-            #if i % tenPercent == 0:
-            #    printt(f'{str(tens)} % done...')
-            #    tens = tens + 10
-
-            if i % onePercent == 0:
-                printt(f'{str(ones)} % done...')
-                ones = ones + 1
+            enc.compress_next(output.history['loss'][0], tf.argmax(tar[0][0]))
 
             # written to txt file to check consecutive runs
             # self.wr.write(str(output.history['loss'][0]) + '\r\n')
@@ -201,7 +182,6 @@ class LstmEncoder:
         # self.close_file_for_writing()
 
         enc.stop()
-        printt('Done!')
 
     def __init__(self):
         printt('eNcoder initiated.')
@@ -212,3 +192,6 @@ if __name__ == '__main__':
     enc.load_data()
     enc.print_hyperparams_and_data_info()
     enc.build_model()
+
+# compression lasts ~1h for input50000_4.txt and the output is 6 times bigger than with regular Ar.Enc.
+# very disappointing if I might say
