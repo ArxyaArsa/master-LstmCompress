@@ -13,8 +13,8 @@ from arithmeticdecompress import ArithmeticDecompress
 
 SEED = 7                        # universal seed for all
 VERBOSE = 0                     # verbosity for fitting function and more (+)
-DEFAULT_PROBABILITY_DISTRIBUTION_ESTIMATE_FIRST = 10.0
-DEFAULT_PROBABILITY_DISTRIBUTION_ESTIMATE_SECOND = 15.0
+DEFAULT_PROB_DISTR_EST_1 = 10.0
+DEFAULT_PROB_DISTR_EST_2 = 15.0
 
 ## setting random seed in numpy and tensorflow so we always get the same output from the same input
 # https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.seed.html
@@ -76,7 +76,7 @@ class LstmEncoder:
         self.dictionary = set(self.data)
         #self.dictionary_size = 256          # set to 256 because of byte reading; was: len(self.dictionary)
         #self.num_features = len(self.dictionary)
-        self.time_steps = (self.total_series_len) // self.batch_size // self.num_features
+        #self.time_steps = self.total_series_len // self.batch_size // self.num_features
         printt(f'Data loaded.')
 
     def print_hyperparams_and_data_info(self):
@@ -109,10 +109,12 @@ class LstmEncoder:
 
         #data_array = [x / self.dictionary_size for x in self.data]
         data_array = list(self.data)
+        #data_array = self.one_hot_encode(data_array, self.dictionary_size)
 
         #self.num_features = self.dictionary_size
 
-        data_final = np.array(data_array).reshape((self.batch_size, self.time_steps, self.num_features))
+        real_time_steps = self.total_series_len // self.batch_size // self.num_features
+        data_final = np.array(data_array).reshape((self.batch_size, real_time_steps, self.num_features))
 
         return data_final
 
@@ -164,8 +166,8 @@ class LstmEncoder:
         enc = ArithmeticCompress(self.to_file)
         enc.start()
 
-        enc.compress_next(DEFAULT_PROBABILITY_DISTRIBUTION_ESTIMATE_FIRST, self.data[0])
-        enc.compress_next(DEFAULT_PROBABILITY_DISTRIBUTION_ESTIMATE_SECOND, self.data[1])
+        enc.compress_next(DEFAULT_PROB_DISTR_EST_1, self.data[0])
+        enc.compress_next(DEFAULT_PROB_DISTR_EST_2, self.data[1])
 
         until = data_final.shape[1]
         tenPercent = until // 10
@@ -173,8 +175,8 @@ class LstmEncoder:
         tens = 0
         ones = 0
         for i in range(until-2):
-            inp = data_final[:,i,:].reshape((self.batch_size, 1, self.num_features))
-            tar = data_final[:,i+1,:].reshape((self.batch_size, 1, self.num_features))
+            inp = data_final[:,i,:].reshape((self.batch_size, self.time_steps, self.num_features))
+            tar = data_final[:,i+1,:].reshape((self.batch_size, self.time_steps, self.num_features))
 
             if VERBOSE > 0:
                 printt(f'i == {i}/{until}')
@@ -252,8 +254,8 @@ class LstmEncoder:
         dec = ArithmeticDecompress(self.from_file, self.to_file)
         dec.start()
 
-        symbol1 = dec.decompress_next(DEFAULT_PROBABILITY_DISTRIBUTION_ESTIMATE_FIRST)
-        symbol2 = dec.decompress_next(DEFAULT_PROBABILITY_DISTRIBUTION_ESTIMATE_SECOND)
+        symbol1 = dec.decompress_next(DEFAULT_PROB_DISTR_EST_1)
+        symbol2 = dec.decompress_next(DEFAULT_PROB_DISTR_EST_2)
 
         count = 0
         while symbol2 != 256:
@@ -307,12 +309,12 @@ class LstmEncoder:
 
 if __name__ == '__main__':
 
-    op = 'decode'       # 'encode' or 'decode'
+    op = 'encode'       # 'encode' or 'decode'
 
     if op == 'encode':
         lstmEnc = LstmEncoder(
             from_file=f'data/arbitrary/pdf.pdf',
-            to_file=f'data/compressed/compressed_pdf_loss.bin'
+            to_file=f'data/compressed/compressed_pdf_loss1.bin'
         )
         lstmEnc.load_data()
         lstmEnc.print_hyperparams_and_data_info()
@@ -321,8 +323,8 @@ if __name__ == '__main__':
         lstmEnc.compress(model, data)
     else:
         lstmEnc = LstmEncoder(
-            from_file=f'data/compressed/compressed_pdf_loss.bin',
-            to_file=f'data/decompressed/pdf.pdf',
+            from_file=f'data/compressed/compressed_pdf_loss1.bin',
+            to_file=f'data/decompressed/pdf1.pdf',
         )
         lstmEnc.print_hyperparams_and_data_info()
         model = lstmEnc.build_model()
