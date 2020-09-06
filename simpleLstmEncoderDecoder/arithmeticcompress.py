@@ -20,28 +20,28 @@ import arithmeticcoding
 class ArithmeticCompress():
 
     def __init__(self, output_file):
-        #self.inputfile = input_file
         self.outputfile = output_file
 
-    def start(self):
-        #self.inp = open(self.inputfile, "rb")
+    def start(self, dictionary_size=256):
+        self.dictionary_size = dictionary_size
         self.bitout = arithmeticcoding.BitOutputStream(open(self.outputfile, "wb"))
-        #self.inp.__enter__()
-        #self.bitout.__enter__()
-        self.freqsTable = arithmeticcoding.SimpleFrequencyTable([1] * 257)
+        self.freqsTable = arithmeticcoding.SimpleFrequencyTable([1] * (dictionary_size + 1))
         self.encoder = arithmeticcoding.ArithmeticEncoder(32, self.bitout)
 
     def stop(self):
-        self.encoder.write(self.freqsTable, 256)  # EOF
-        self.freqsTable.set(256, 1)
+        self.encoder.write(self.freqsTable, self.dictionary_size)  # EOF
         self.encoder.finish()  # Flush remaining code bits
-        #self.inp.__exit__()
         self.bitout.close()
 
-    def compress_next(self, freq_pred, symbol_number):
+    def compress_next(self, new_freq_table_256, symbol_number):
+        if isinstance(new_freq_table_256, (list, set)):
+            new_table_copy = list(new_freq_table_256)
+            new_table_copy.extend([1])
+            self.freqsTable = arithmeticcoding.SimpleFrequencyTable(new_table_copy)
+
         self.encoder.write(self.freqsTable, symbol_number)
-        # set new frequency for the symbol
-        self.freqsTable.set(symbol_number, freq_pred)
+        ## set new frequency for the symbol
+        #self.freqsTable.set(symbol_number, freq_pred)
 
 
 ## Returns a frequency table based on the bytes in the given file.

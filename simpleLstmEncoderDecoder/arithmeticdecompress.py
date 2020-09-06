@@ -17,11 +17,12 @@ class ArithmeticDecompress():
 		self.inputfile = input_file
 		self.outputfile = output_file
 
-	def start(self):
+	def start(self, dictionary_size=256):
+		self.dictionary_size = dictionary_size
 		self.inp = open(self.inputfile, "rb")
 		self.out = open(self.outputfile, "wb")
 		self.bitin = arithmeticcoding.BitInputStream(self.inp)
-		self.freqsTable = arithmeticcoding.SimpleFrequencyTable([1] * 257)
+		self.freqsTable = arithmeticcoding.SimpleFrequencyTable([1] * (self.dictionary_size + 1))
 		self.decoder = arithmeticcoding.ArithmeticDecoder(32, self.bitin)
 
 	def stop(self):
@@ -32,9 +33,13 @@ class ArithmeticDecompress():
 	Decompresses the file bit by bit and writes into the output file.
 	Also returns the symbol
 	"""
-	def decompress_next(self, freq_pred):
+	def decompress_next(self, new_freq_table_256):
+		if isinstance(new_freq_table_256, (list, set)):
+			new_table_copy = list(new_freq_table_256)
+			new_table_copy.extend([1])
+			self.freqsTable = arithmeticcoding.SimpleFrequencyTable(new_table_copy)
+
 		symbol = self.decoder.read(self.freqsTable)
-		self.freqsTable.set(symbol, freq_pred)
 		self.out.write(bytes((symbol,)))
 
 		return symbol
