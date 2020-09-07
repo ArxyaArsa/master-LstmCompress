@@ -7,6 +7,7 @@ from tensorflow import keras
 from tensorflow.keras import layers
 import numpy as np
 from datetime import datetime
+from byte_huffman import HuffmanEncoder,HuffmanDecoder
 
 # for GPU error "OP_REQUIRES failed at cudnn_rnn_ops.cc:1510 : Unknown: Fail to find the dnn implementation."
 from tensorflow.python.keras import backend
@@ -190,7 +191,7 @@ class LstmEncoder:
         training_time = now - now
         compressing_time = now - now
 
-        enc = ArithmeticCompress(self.to_file)
+        enc = HuffmanEncoder(self.to_file)
         enc.start(dictionary_size=self.dictionary_size)
 
         enc.compress_next(None, self.data[0])
@@ -222,6 +223,7 @@ class LstmEncoder:
             start = datetime.now()
 
             compress_input = predict_output[0][0].numpy().tolist()
+            #compress_input = [int(i * 1000000) for i in compress_input]
             enc.compress_next(compress_input, self.data[i+1])
 
             lasted = datetime.now() - start
@@ -251,7 +253,8 @@ class LstmEncoder:
             # self.wr.write(str(output.history['loss'][0]) + '\r\n')
             max_value = max(compress_input)
             max_index = compress_input.index(max_value)
-            #self.wr[doc1].write(str(compress_input) + '\n' + str(max_index) + '    ' + '{:.12f}'.format(max_value) + '\n')
+            self.wr[doc1].write(str(compress_input) + '\n' + str(max_index) + '    ' + '{:.12f}'.format(max_value) + '\n')
+            self.wr[doc1].write(str(self.data[i]) + ' -> ' + str(self.data[i+1]) + '\n')
             self.dictionary_frequency__max_from_rnn[max_index] += 1
 
             #printt('Output history: ')
@@ -276,7 +279,6 @@ class LstmEncoder:
         # written to txt file to check consecutive runs
         self.close_file_for_writing()
 
-    # not working with the new model_build
     def decompress(self, model):
         # written to txt file to check consecutive runs
         doc1 = self.open_file_for_writing('data/decompressing.txt')
@@ -286,16 +288,19 @@ class LstmEncoder:
         training_time = now - now
         decompressing_time = now - now
 
-        dec = ArithmeticDecompress(self.from_file, self.to_file)
+        dec = HuffmanDecoder(self.from_file, self.to_file)
         dec.start(dictionary_size=self.dictionary_size)
 
         symbol1 = dec.decompress_next(None)
         #symbol2 = dec.decompress_next(DEFAULT_PROB_DISTR_EST_2)
 
+        inp = self.get_starting_input_array()
+
         count = 0
-        while symbol1 != 256:
-            input_data = self.one_hot_encode([symbol1], self.dictionary_size)
-            inp = np.array(input_data).reshape((self.batch_size, self.time_steps, self.num_features))
+        while symbol1 != self.dictionary_size:      # using dictionary_size but this is not a must ()
+            #input_data = self.one_hot_encode([symbol1], self.dictionary_size)
+            #inp = np.array(input_data).reshape((self.batch_size, self.time_steps, self.num_features))
+            inp = self.shift_and_replace_last(inp, symbol1)
 
             # PREDICTING ##############################################
             ###########################################################
@@ -312,6 +317,7 @@ class LstmEncoder:
             start = datetime.now()
 
             decompress_input = predict_output[0][0].numpy().tolist()
+            #decompress_input = [int(i * 1000000) for i in decompress_input]
             symbol2 = dec.decompress_next(decompress_input)
 
             lasted = datetime.now() - start
@@ -331,7 +337,11 @@ class LstmEncoder:
             ###########################################################
 
             # written to txt file to check consecutive runs
-            self.wr[doc1].write(str(output) + '\r\n')
+            #self.wr[doc1].write(str(output) + '\r\n')
+            max_value = max(decompress_input)
+            max_index = decompress_input.index(max_value)
+            self.wr[doc1].write(str(decompress_input) + '\n' + str(max_index) + '    ' + '{:.12f}'.format(max_value) + '\n')
+            self.wr[doc1].write(str(symbol1) + ' -> ' + str(symbol2) + '\n')
 
             symbol1 = symbol2
 
@@ -398,12 +408,14 @@ class LstmEncoder:
 
 if __name__ == '__main__':
 
-    op = 'encode'       # 'encode' or 'decode' or 'testing'*
+    op = 'decode'       # 'encode' or 'decode' or 'testing' or 'huffman'
+
+    file = 'seq_8_input_1k.txt'
 
     if op == 'encode':
         lstmEnc = LstmEncoder(
-            from_file=f'data/arbitrary/seq_32_input_100k.bin',
-            to_file=f'data/compressed/compressed_seq_32_input_100k_2.bin'
+            from_file=f'data/arbitrary/{file}',
+            to_file=f'data/compressed/compressed_{file}.bin'
         )
         lstmEnc.load_data()
         lstmEnc.print_hyperparams_and_data_info()
@@ -412,13 +424,13 @@ if __name__ == '__main__':
         lstmEnc.compress(model, data)
     elif op == 'decode':
         lstmEnc = LstmEncoder(
-            from_file=f'data/compressed/compressed_input60k_all.bin',
-            to_file=f'data/decompressed/input60k_all.txt',
+            from_file=f'data/compressed/compressed_{file}.bin',
+            to_file=f'data/decompressed/decompressed_{file}',
         )
         lstmEnc.print_hyperparams_and_data_info()
         model = lstmEnc.build_model()
         lstmEnc.decompress(model)
-    else:
+    elif op == 'testing':
         lstmEnc = LstmEncoder(
             from_file=f'data/arbitrary/input5k_all.txt',
             to_file=f'data/compressed/compressed_input5k_all.bin'
@@ -429,3 +441,10 @@ if __name__ == '__main__':
         data = lstmEnc.prepare_data_for_training()
         model = lstmEnc.build_model(data_final=data, is_only_training=True)
         lstmEnc.train_for_testing(model, data)
+    elif op == 'huffman':
+        from_file = 'data/arbitrary/input20k_all.txt'
+        to_file = ''
+
+        h = HuffmanCoding(from_file)
+
+        to_file = h.compress()

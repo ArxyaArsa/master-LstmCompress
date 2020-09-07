@@ -26,7 +26,7 @@ class ArithmeticCompress():
         self.dictionary_size = dictionary_size
         self.bitout = arithmeticcoding.BitOutputStream(open(self.outputfile, "wb"))
         self.freqsTable = arithmeticcoding.SimpleFrequencyTable([1] * (dictionary_size + 1))
-        self.encoder = arithmeticcoding.ArithmeticEncoder(32, self.bitout)
+        #self.encoder = arithmeticcoding.ArithmeticEncoder(32, self.bitout)
 
     def stop(self):
         self.encoder.write(self.freqsTable, self.dictionary_size)  # EOF
@@ -36,8 +36,10 @@ class ArithmeticCompress():
     def compress_next(self, new_freq_table_256, symbol_number):
         if isinstance(new_freq_table_256, (list, set)):
             new_table_copy = list(new_freq_table_256)
-            new_table_copy.extend([1])
+            new_table_copy.extend([float(1)])
             self.freqsTable = arithmeticcoding.SimpleFrequencyTable(new_table_copy)
+
+        self.encoder = arithmeticcoding.ArithmeticEncoder(32, self.bitout)
 
         self.encoder.write(self.freqsTable, symbol_number)
         ## set new frequency for the symbol

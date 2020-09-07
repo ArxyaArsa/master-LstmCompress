@@ -43,12 +43,14 @@ class ArithmeticCoderBase:
 		# Bit mask of num_state_bits ones, which is 0111...111.
 		self.state_mask = self.full_range - 1
 		
+		self.reset_state_fields()
+
+	def reset_state_fields(self):
 		# -- State fields --
 		# Low end of this arithmetic coder's current range. Conceptually has an infinite number of trailing 0s.
 		self.low = 0
 		# High end of this arithmetic coder's current range. Conceptually has an infinite number of trailing 1s.
 		self.high = self.state_mask
-	
 	
 	# Updates the code range (low and high) of this arithmetic coder as a result
 	# of processing the given symbol with the given frequency table.
@@ -128,6 +130,7 @@ class ArithmeticEncoder(ArithmeticCoderBase):
 	# Encodes the given symbol based on the given frequency table.
 	# This updates this arithmetic coder's state and may write out some bits.
 	def write(self, freqs, symbol):
+		#self.reset_state_fields()
 		if not isinstance(freqs, CheckedFrequencyTable):
 			freqs = CheckedFrequencyTable(freqs)
 		self.update(freqs, symbol)
@@ -173,6 +176,7 @@ class ArithmeticDecoder(ArithmeticCoderBase):
 	# Decodes the next symbol based on the given frequency table and returns it.
 	# Also updates this arithmetic coder's state and may read in some bits.
 	def read(self, freqs):
+		#self.reset_state_fields()
 		if not isinstance(freqs, CheckedFrequencyTable):
 			freqs = CheckedFrequencyTable(freqs)
 		
