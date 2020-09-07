@@ -121,9 +121,9 @@ class HuffmanEncoder(HuffmanCoding):
         with open(self.output_file, 'wb') as output:
             output.write(bytes(b))
 
-        with open('./data/huffman_encoder.txt', 'wt') as log:
-            log.write('padded:   ' + padded + '\n')
-            log.write('unpadded: ________' + self.encoded + '\n')
+        #with open('./data/huffman_encoder.txt', 'wt') as log:
+        #    log.write('padded:   ' + padded + '\n')
+        #    log.write('unpadded: ________' + self.encoded + '\n')
 
 class HuffmanDecoder(HuffmanCoding):
 
@@ -147,9 +147,9 @@ class HuffmanDecoder(HuffmanCoding):
 
             self.encoded = self.remove_padding(bit_string)
 
-            with open('./data/huffman_decoder.txt', 'wt') as log:
-                log.write('padded:   ' + bit_string + '\n')
-                log.write('unpadded: ________' + self.encoded + '\n')
+            #with open('./data/huffman_decoder.txt', 'wt') as log:
+            #    log.write('padded:   ' + bit_string + '\n')
+            #    log.write('unpadded: ________' + self.encoded + '\n')
 
         self.encoded_len = len(self.encoded)
         self.out = open(self.output_file, "wb")

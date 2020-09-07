@@ -23,21 +23,33 @@ from arithmeticdecompress import ArithmeticDecompress
 SEED = 7                        # universal seed for all
 VERBOSE = 2                     # verbosity for fitting function and more (+)
 
-# setting random seed in numpy and tensorflow so we always get the same output from the same input
-# https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.seed.html
-np.random.seed(SEED)
-# https://www.tensorflow.org/api_docs/python/tf/random/set_seed
-tf.random.set_seed(SEED)
-
 # not using GPU because of GPU non-determinism (randomness)
 # https://riptutorial.com/tensorflow/example/31875/run-tensorflow-on-cpu-only---using-the--cuda-visible-devices--environment-variable-
 tf.config.set_visible_devices([], 'GPU')
 
 pid = os.getpid()
 
+log_file = open(f'./data/logs/log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}', 'wt')
+
+def seed_randoms():
+    # setting random seed in numpy and tensorflow so we always get the same output from the same input
+    # https://docs.scipy.org/doc/numpy-1.15.0/reference/generated/numpy.random.seed.html
+    np.random.seed(SEED)
+    # https://www.tensorflow.org/api_docs/python/tf/random/set_seed
+    tf.random.set_seed(SEED)
+
+#def open_log_file():
+#    log_file = open(f'./data/logs/log_{datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}', 'wt')
+
+def close_log_file():
+    log_file.close()
+
 def printt(text_to_print):
     now = datetime.now()
-    print(f'({str(pid)}) {str(now)}: {text_to_print}')
+    msg = f'({str(pid)}) {str(now)}: {text_to_print}'
+    print(msg)
+    if log_file is not None:
+        log_file.write(msg + '\n')
 
 
 class CustomCallback(keras.callbacks.Callback):
@@ -55,7 +67,8 @@ class LstmEncoder:
     data = []                   # will be filled in load_data
     batch_size = 1              # also seems to be set in stone?
     num_epochs = 1              # set in stone!
-    trunc_bp_len = 64
+    trunc_bp_len = 128
+    history_len = 64
     total_series_len = -1       # will be set in load_data => len(data)
     time_steps = -1             # will be set in load_data => total_series_len//batch_size//num_features
     dictionary = []             # will be set in load_data => set(data)
@@ -125,10 +138,10 @@ class LstmEncoder:
         return data_final
 
     def shape_input_data(self, input_data):
-        return np.array(input_data).reshape((self.batch_size, 1, self.trunc_bp_len))    # should be self.trunc_bp_len
+        return np.array(input_data).reshape((self.batch_size, 1, self.history_len))    # should be self.trunc_bp_len
 
     def get_starting_input_array(self):
-        return self.shape_input_data([0 for _ in range(self.trunc_bp_len)])             # should be self.trunc_bp_len
+        return self.shape_input_data([0 for _ in range(self.history_len)])             # should be self.trunc_bp_len
 
     def shift_and_replace_last(self, input_data, new_element):
         shape = input_data.shape
@@ -142,7 +155,7 @@ class LstmEncoder:
         # debugging purposes
         # print(data_array, '\r\n', data_final)
 
-        batch_input_shape = ((self.batch_size, None, self.trunc_bp_len), (self.time_steps, self.batch_size, self.trunc_bp_len))[is_only_training]
+        batch_input_shape = (self.batch_size, None, self.history_len)
 
         model = keras.Sequential(name='eNcoder-network')
         model.add(layers.GRU(self.trunc_bp_len,
@@ -251,11 +264,11 @@ class LstmEncoder:
 
             # written to txt file to check consecutive runs
             # self.wr.write(str(output.history['loss'][0]) + '\r\n')
-            max_value = max(compress_input)
-            max_index = compress_input.index(max_value)
-            self.wr[doc1].write(str(compress_input) + '\n' + str(max_index) + '    ' + '{:.12f}'.format(max_value) + '\n')
-            self.wr[doc1].write(str(self.data[i]) + ' -> ' + str(self.data[i+1]) + '\n')
-            self.dictionary_frequency__max_from_rnn[max_index] += 1
+            ##max_value = max(compress_input)
+            ##max_index = compress_input.index(max_value)
+            ##self.wr[doc1].write(str(compress_input) + '\n' + str(max_index) + '    ' + '{:.12f}'.format(max_value) + '\n')
+            ##self.wr[doc1].write(str(self.data[i]) + ' -> ' + str(self.data[i+1]) + '\n')
+            ##self.dictionary_frequency__max_from_rnn[max_index] += 1
 
             #printt('Output history: ')
             #print(output.history)
@@ -338,10 +351,10 @@ class LstmEncoder:
 
             # written to txt file to check consecutive runs
             #self.wr[doc1].write(str(output) + '\r\n')
-            max_value = max(decompress_input)
-            max_index = decompress_input.index(max_value)
-            self.wr[doc1].write(str(decompress_input) + '\n' + str(max_index) + '    ' + '{:.12f}'.format(max_value) + '\n')
-            self.wr[doc1].write(str(symbol1) + ' -> ' + str(symbol2) + '\n')
+            ##max_value = max(decompress_input)
+            ##max_index = decompress_input.index(max_value)
+            ##self.wr[doc1].write(str(decompress_input) + '\n' + str(max_index) + '    ' + '{:.12f}'.format(max_value) + '\n')
+            ##self.wr[doc1].write(str(symbol1) + ' -> ' + str(symbol2) + '\n')
 
             symbol1 = symbol2
 
@@ -352,7 +365,7 @@ class LstmEncoder:
         dec.stop()
         printt('Done!')
 
-        print('Predicting lasted: ', training_time)
+        print('Predicting lasted: ', predicting_time)
         print('Decompression lasted: ', decompressing_time)
         print('Training lasted: ', training_time)
 
@@ -408,43 +421,62 @@ class LstmEncoder:
 
 if __name__ == '__main__':
 
-    op = 'decode'       # 'encode' or 'decode' or 'testing' or 'huffman'
+    #open_log_file()
 
-    file = 'seq_8_input_1k.txt'
+    files = [#'seq_8_input_1k.txt',]
+             #'input5k_all.txt',]
+             'seq_32_input_100k.bin',]
+             #'seq_128_input_100k.bin',]
+             #'seq_256_input_100k.bin',]
+             #'seq_input_100k.bin',]
+             #'input_HMM_0.3_HMM_10_markovity.txt',]
+             #'input_HMM_0.3_HMM_20_markovity.txt',]
+             #'input_HMM_0.3_HMM_30_markovity.txt',]
+             #'input_HMM_0.3_HMM_40_markovity.txt']
 
-    if op == 'encode':
-        lstmEnc = LstmEncoder(
-            from_file=f'data/arbitrary/{file}',
-            to_file=f'data/compressed/compressed_{file}.bin'
-        )
-        lstmEnc.load_data()
-        lstmEnc.print_hyperparams_and_data_info()
-        data = lstmEnc.prepare_data()
-        model = lstmEnc.build_model(data)
-        lstmEnc.compress(model, data)
-    elif op == 'decode':
-        lstmEnc = LstmEncoder(
-            from_file=f'data/compressed/compressed_{file}.bin',
-            to_file=f'data/decompressed/decompressed_{file}',
-        )
-        lstmEnc.print_hyperparams_and_data_info()
-        model = lstmEnc.build_model()
-        lstmEnc.decompress(model)
-    elif op == 'testing':
-        lstmEnc = LstmEncoder(
-            from_file=f'data/arbitrary/input5k_all.txt',
-            to_file=f'data/compressed/compressed_input5k_all.bin'
-        )
-        lstmEnc.batch_size = 5
-        lstmEnc.load_data_for_training()
-        lstmEnc.print_hyperparams_and_data_info()
-        data = lstmEnc.prepare_data_for_training()
-        model = lstmEnc.build_model(data_final=data, is_only_training=True)
-        lstmEnc.train_for_testing(model, data)
-    elif op == 'huffman':
-        from_file = 'data/arbitrary/input20k_all.txt'
-        to_file = ''
+    #ops = ['encode', 'decode']       # 'encode' or 'decode' #or 'testing' or 'huffman'
+    ops = ['decode']       # 'encode' or 'decode' #or 'testing' or 'huffman'
 
-        h = HuffmanCoding(from_file)
+    # DON'T ITERATE - IT WON'T WORK - SEEDING OR SOMETHING IS WRONG !!
+    for file in files:
+        for op in ops:
+            printt(f' -- Started: {op} -> {file}')
 
-        to_file = h.compress()
+            # always seed the randoms before a new call !!!
+            seed_randoms()
+            if op == 'encode':
+                lstmEnc = LstmEncoder(
+                    from_file=f'data/arbitrary/{file}',
+                    to_file=f'data/compressed/compressed_{file}.bin'
+                )
+                lstmEnc.load_data()
+                lstmEnc.print_hyperparams_and_data_info()
+                data = lstmEnc.prepare_data()
+                model = lstmEnc.build_model(data)
+                lstmEnc.compress(model, data)
+            if op == 'decode':
+                lstmEnc = LstmEncoder(
+                    from_file=f'data/compressed/compressed_{file}.bin',
+                    to_file=f'data/decompressed/decompressed_{file}',
+                )
+                lstmEnc.print_hyperparams_and_data_info()
+                model = lstmEnc.build_model()
+                lstmEnc.decompress(model)
+            #if op == 'testing':
+            #    lstmEnc = LstmEncoder(
+            #        from_file=f'data/arbitrary/input5k_all.txt',
+            #        to_file=f'data/compressed/compressed_input5k_all.bin'
+            #    )
+            #    lstmEnc.batch_size = 5
+            #    lstmEnc.load_data_for_training()
+            #    lstmEnc.print_hyperparams_and_data_info()
+            #    data = lstmEnc.prepare_data_for_training()
+            #    model = lstmEnc.build_model(data_final=data, is_only_training=True)
+            #    lstmEnc.train_for_testing(model, data)
+            #if op == 'huffman':
+            #    from_file = 'data/arbitrary/input20k_all.txt'
+            #    to_file = ''
+            #    h = HuffmanCoding(from_file)
+            #    to_file = h.compress()
+
+    close_log_file()
