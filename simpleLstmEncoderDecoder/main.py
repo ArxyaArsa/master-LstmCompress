@@ -99,12 +99,12 @@ class RnnCoder:
 
     def print_hyperparams_and_data_info(self):
         printt('Hyper-parameters and data info:')
-        print(f'\tBatch size: {str(self.batch_size)}')
-        print(f'\tNumber of epochs: {str(self.num_epochs)}')
-        print(f'\tTotal data series length: {str(self.total_series_len)}')
-        print(f'\tNumber of batches (time steps): {str(self.time_steps)}')
-        print(f'\tDictionary entries: ', self.dictionary)
-        print(f'\tDictionary size (later number of features): {str(self.dictionary_size)}')
+        printt(f'Batch size: {str(self.batch_size)}')
+        printt(f'Number of epochs: {str(self.num_epochs)}')
+        printt(f'Total data series length: {str(self.total_series_len)}')
+        printt(f'Number of batches (time steps): {str(self.time_steps)}')
+        printt(f'Dictionary entries: str({self.dictionary})')
+        printt(f'Dictionary size (later number of features): {str(self.dictionary_size)}')
 
     def open_file_for_writing(self, file_path):
         i = len(self.wr)
@@ -399,7 +399,7 @@ class RnnCoder:
         printt(f'Output file size: {str(output_file_stats.st_size)} bytes')
         printt(f'Compression ratio: {"{:.3f}".format(input_file_stats.st_size / output_file_stats.st_size)}')
 
-    def __init__(self, name, from_file, to_file, encoder_type, log_debugging_info=True):
+    def __init__(self, name, from_file, to_file, encoder_type, log_debugging_info=False):
         self.name = name
         self.from_file = from_file
         self.to_file = to_file
@@ -470,3 +470,7 @@ if __name__ == '__main__':
     printt(f' -- Done: {coder_type} - {op} -> {file}')
 
     close_log_file()
+
+# TODO: add original file length to the start of the file + % in decoding
+# TODO: add support to return the result w/o writing to file (in encoders)
+# TODO: parametrize main function so the code can be called on arbitrary files + rename? + pack?
