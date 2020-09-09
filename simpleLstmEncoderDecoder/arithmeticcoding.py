@@ -126,7 +126,6 @@ class ArithmeticEncoder(ArithmeticCoderBase):
 		# Number of saved underflow bits. This value can grow without bound.
 		self.num_underflow = 0
 	
-	
 	# Encodes the given symbol based on the given frequency table.
 	# This updates this arithmetic coder's state and may write out some bits.
 	def write(self, freqs, symbol):
@@ -135,13 +134,11 @@ class ArithmeticEncoder(ArithmeticCoderBase):
 			freqs = CheckedFrequencyTable(freqs)
 		self.update(freqs, symbol)
 	
-	
 	# Terminates the arithmetic coding by flushing any buffered bits, so that the output can be decoded properly.
 	# It is important that this method must be called at the end of the each encoding process.
 	# Note that this method merely writes data to the underlying output stream but does not close it.
 	def finish(self):
 		self.output.write(1)
-	
 	
 	def shift(self):
 		bit = self.low >> (self.num_state_bits - 1)
@@ -152,7 +149,6 @@ class ArithmeticEncoder(ArithmeticCoderBase):
 			self.output.write(bit ^ 1)
 		self.num_underflow = 0
 	
-	
 	def underflow(self):
 		self.num_underflow += 1
 
@@ -160,7 +156,7 @@ class ArithmeticEncoder(ArithmeticCoderBase):
 
 # Reads from an arithmetic-coded bit stream and decodes symbols.
 class ArithmeticDecoder(ArithmeticCoderBase):
-	
+
 	# Constructs an arithmetic coding decoder based on the
 	# given bit input stream, and fills the code bits.
 	def __init__(self, numbits, bitin):
@@ -171,7 +167,6 @@ class ArithmeticDecoder(ArithmeticCoderBase):
 		self.code = 0
 		for _ in range(self.num_state_bits):
 			self.code = self.code << 1 | self.read_code_bit()
-	
 	
 	# Decodes the next symbol based on the given frequency table and returns it.
 	# Also updates this arithmetic coder's state and may read in some bits.
@@ -208,15 +203,12 @@ class ArithmeticDecoder(ArithmeticCoderBase):
 			raise AssertionError("Code out of range")
 		return symbol
 	
-	
 	def shift(self):
 		self.code = ((self.code << 1) & self.state_mask) | self.read_code_bit()
 	
-	
 	def underflow(self):
 		self.code = (self.code & self.half_range) | ((self.code << 1) & (self.state_mask >> 1)) | self.read_code_bit()
-	
-	
+
 	# Returns the next bit (0 or 1) from the input stream. The end
 	# of stream is treated as an infinite number of trailing zeros.
 	def read_code_bit(self):
@@ -224,7 +216,6 @@ class ArithmeticDecoder(ArithmeticCoderBase):
 		if temp == -1:
 			temp = 0
 		return temp
-
 
 
 # ---- Frequency table classes ----
@@ -445,6 +436,15 @@ class SimpleFrequencyTable(FrequencyTable):
 			result += "{}\t{}\n".format(i, freq)
 		return result
 
+
+
+class ImmutableSimpleFrequencyTable(SimpleFrequencyTable):
+	def __init__(self, freqs):
+		super().__init__(freqs)
+
+	# Increments the frequency of the given symbol.
+	def increment(self, symbol):
+		temp = 1
 
 
 # A wrapper that checks the preconditions (arguments) and postconditions (return value) of all

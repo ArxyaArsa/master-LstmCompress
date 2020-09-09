@@ -10,6 +10,7 @@
 
 import sys
 import arithmeticcoding
+from decimal import *
 
 class ArithmeticDecompress():
 
@@ -22,8 +23,9 @@ class ArithmeticDecompress():
 		self.inp = open(self.inputfile, "rb")
 		self.out = open(self.outputfile, "wb")
 		self.bitin = arithmeticcoding.BitInputStream(self.inp)
-		self.freqsTable = arithmeticcoding.SimpleFrequencyTable([1] * (self.dictionary_size + 1))
-		#self.decoder = arithmeticcoding.ArithmeticDecoder(32, self.bitin)
+		#self.freqsTable = arithmeticcoding.SimpleFrequencyTable([float(i % 8 + 1) for i in range(self.dictionary_size + 1)])
+		self.freqsTable = arithmeticcoding.FlatFrequencyTable(self.dictionary_size + 1)
+		self.decoder = arithmeticcoding.ArithmeticDecoder(32, self.bitin)
 
 	def stop(self):
 		self.out.close()
@@ -36,13 +38,15 @@ class ArithmeticDecompress():
 	def decompress_next(self, new_freq_table_256):
 		if isinstance(new_freq_table_256, (list, set)):
 			new_table_copy = list(new_freq_table_256)
-			new_table_copy.extend([float(1)])
+			new_table_copy.extend([int(1)])
 			self.freqsTable = arithmeticcoding.SimpleFrequencyTable(new_table_copy)
 
-		self.decoder = arithmeticcoding.ArithmeticDecoder(32, self.bitin)
+		#self.decoder = arithmeticcoding.ArithmeticDecoder(32, self.bitin)
 
 		symbol = self.decoder.read(self.freqsTable)
-		self.out.write(bytes((symbol,)))
+
+		if symbol < 256:
+			self.out.write(bytes((symbol,)))
 
 		return symbol
 
