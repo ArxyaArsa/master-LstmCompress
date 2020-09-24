@@ -115,6 +115,9 @@ class HuffmanEncoder(HuffmanCoding):
         self.make_codes()
         self.encoded += self.codes[symbol]
 
+    def compress_next_simple(self, symbol):
+        self.encoded += self.codes[symbol]
+
     def stop(self):
         padded = self.pad_encoded_text(self.encoded)
         b = self.get_byte_array(padded)

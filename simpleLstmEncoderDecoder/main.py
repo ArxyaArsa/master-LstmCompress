@@ -28,6 +28,8 @@ VERBOSE = 2  # verbosity for fitting function and more (+)
 
 ARITHMETIC_CODER_TYPE = 'arithmetic'
 HUFFMAN_CODER_TYPE = 'huffman'
+LSTM_RNN_TYPE = 'lstm'
+GRU_RNN_TYPE = 'gru'
 
 # not using GPU because of GPU non-determinism (randomness)
 # https://riptutorial.com/tensorflow/example/31875/run-tensorflow-on-cpu-only---using-the--cuda-visible-devices--environment-variable-
@@ -77,6 +79,7 @@ class RnnCoder:
     num_features = dictionary_size      # set in stone! (was: will be set after one hot encoding to dictionary_size)
     dictionary_frequency = []
     dictionary_frequency__max_from_rnn = [0 for _ in range(dictionary_size)]
+    dictionary_frequency_full = []      # full distribution probability (counts)
 
     base_training_on = 'loss'           # 'loss' or 'accuracy' - unused actually
     from_file = ''                      # will be set in __init__
@@ -94,6 +97,13 @@ class RnnCoder:
         self.total_series_len = len(self.data)
         self.dictionary = set(self.data)
         self.dictionary_frequency = [(x, self.data.count(x)) for x in self.dictionary]  # informational only
+
+        self.dictionary_frequency_full = [self.data.count(x) for x in range(0, 255)]
+        count_sum = 0
+        for x in self.dictionary_frequency_full:
+            count_sum = count_sum + x
+
+        self.dictionary_frequency_full_scaled = [x/count_sum for x in self.dictionary_frequency_full]
 
         printt(f'Data loaded.')
 
@@ -149,14 +159,28 @@ class RnnCoder:
         batch_input_shape = (self.batch_size, None, self.history_len)
 
         model = keras.Sequential(name=f'{self.name}-network')
-        model.add(layers.GRU(self.trunc_bp_len,
-                             name='gru-1',
-                             stateful=True,
-                             return_sequences=True,
-                             batch_input_shape=batch_input_shape,
-                             kernel_initializer=keras.initializers.RandomNormal()
-                             )
-                  )
+        if self.rnn_type == GRU_RNN_TYPE:
+            model.add(layers.GRU(self.trunc_bp_len,
+                                 name='gru-1',
+                                 stateful=True,
+                                 return_sequences=True,
+                                 batch_input_shape=batch_input_shape,
+                                 kernel_initializer=keras.initializers.RandomNormal()
+                                 )
+                      )
+        elif self.rnn_type == LSTM_RNN_TYPE:
+            model.add(layers.LSTM(self.trunc_bp_len,
+                                 name='lstm-1',
+                                 stateful=True,
+                                 return_sequences=True,
+                                 batch_input_shape=batch_input_shape,
+                                 kernel_initializer=keras.initializers.RandomNormal()
+                                 )
+                      )
+        else:
+            printt(f'No such rnn type supported: {self.rnn_type}')
+            raise
+
         model.add(layers.Dense(self.num_features, activation='softmax', name=f'dense-softmax-1'))
 
         model.summary()
@@ -390,6 +414,52 @@ class RnnCoder:
         if self.log_debugging_info:
             self.close_file_for_writing()
 
+    def compress_simple(self, data_final):
+
+        now = datetime.now()
+        compressing_time = now - now
+
+        start = datetime.now()
+
+        enc = None
+        if self.encoder_type == HUFFMAN_CODER_TYPE:
+            enc = HuffmanEncoder(self.to_file)
+        elif self.encoder_type == ARITHMETIC_CODER_TYPE:
+            #enc = ArithmeticCompress(self.to_file)
+            raise AttributeError(f'Unsupported encoder type for now "{self.encoder_type}"')
+        else:
+            raise AttributeError(f'Unknown encoder type "{self.encoder_type}"')
+
+        enc.start(dictionary_size=self.dictionary_size)
+
+        enc.compress_next(self.dictionary_frequency_full_scaled, self.data[0])
+
+        inp = self.get_starting_input_array()
+
+        until = data_final.shape[1]
+        onePercent = until // 100
+        ones = 0
+        for i in range(until - 1):
+            # COMPRESSING #############################################
+            ###########################################################
+            enc.compress_next_simple(self.data[i + 1])
+            ###########################################################
+
+            if i % onePercent == 0:
+                printt(f'{str(ones)} % done...')
+                ones = ones + 1
+
+        lasted = datetime.now() - start
+        compressing_time += lasted
+
+        enc.stop()
+
+        self.print_file_stats()
+
+        printt('')
+        printt(f'Compression lasted: {str(compressing_time)}')
+        printt(f'TOTAL TIME: {str(compressing_time)}')
+
     def print_file_stats(self):
         input_file_stats = os.stat(self.from_file)
         output_file_stats = os.stat(self.to_file)
@@ -399,11 +469,12 @@ class RnnCoder:
         printt(f'Output file size: {str(output_file_stats.st_size)} bytes')
         printt(f'Compression ratio: {"{:.3f}".format(input_file_stats.st_size / output_file_stats.st_size)}')
 
-    def __init__(self, name, from_file, to_file, encoder_type, log_debugging_info=False):
+    def __init__(self, name, from_file, to_file, encoder_type, rnn_type, log_debugging_info=False):
         self.name = name
         self.from_file = from_file
         self.to_file = to_file
         self.encoder_type = encoder_type
+        self.rnn_type = rnn_type
         self.log_debugging_info = log_debugging_info
         printt(f'{self.name} initiated.')
 
@@ -413,61 +484,90 @@ if __name__ == '__main__':
     # open_log_file()
 
     file = [
-        # 'seq_8_input_1k.txt'
-        # 'input5k_all.txt'
-        # 'input20k_all.txt'
-        # 'seq_32_input_100k.bin'
-        # 'seq_128_input_100k.bin'
-        # 'seq_256_input_100k.bin'
-        # 'seq_input_100k.bin'
-        # 'input_HMM_0.3_HMM_10_markovity.txt'
-        # 'input_HMM_0.3_HMM_20_markovity.txt'
-        # 'input_HMM_0.3_HMM_40_markovity.txt'
-        'input_HMM_0.3_HMM_90_markovity.txt'
+        #'seq_8_input_1k.txt'
+        #'input5k_all.txt'
+        #'input20k_all.txt'
+        #'seq_32_input_100k.bin'
+        #'seq_128_input_100k.bin'
+        #'seq_256_input_100k.bin'
+        #'seq_input_100k.bin'
+        #'input_HMM_0.3_HMM_10_markovity.txt'
+        #'input_HMM_0.3_HMM_20_markovity.txt'
+        #'input_HMM_0.3_HMM_40_markovity.txt'
+        #'input_HMM_0.3_HMM_90_markovity.txt'
+        'seq_1048576_8.bin'
+        #'random_1048576_16.bin'
+        #'arbitrary1.bin'
     ][0]
 
     op = [
         'encode'
-        # 'decode'
+        #'decode'
     ][0]
 
     coder_type = [
         HUFFMAN_CODER_TYPE
-        # ARITHMETIC_CODER_TYPE
+        #ARITHMETIC_CODER_TYPE
     ][0]
 
-    printt(f' -- Started: {coder_type} - {op} -> {file}')
+    rnn_type = [
+        #LSTM_RNN_TYPE
+        GRU_RNN_TYPE
+    ][0]
+
+    simple = True
 
     # always seed the randoms before a new call !!!
     seed_randoms()
 
-    if op == 'encode':
-        rnnCoder = RnnCoder(
-            name='eNcoder',
-            from_file=f'data/arbitrary/{file}',
-            to_file=f'data/compressed/compressed_{file}_{coder_type}.bin',
-            encoder_type=coder_type,
-            log_debugging_info=False
-        )
-        rnnCoder.load_data()
-        rnnCoder.print_hyperparams_and_data_info()
-        data = rnnCoder.prepare_expected_output_data()
-        model = rnnCoder.build_model(data)
-        rnnCoder.compress(model, data)
+    if simple == False:
+        printt(f' -- Started: {rnn_type} - {coder_type} - {op} -> {file}')
+        if op == 'encode':
+            rnnCoder = RnnCoder(
+                name='eNcoder',
+                from_file=f'data/arbitrary/{file}',
+                to_file=f'data/compressed/encoded_{rnn_type}_{coder_type}_{file}.bin',
+                encoder_type=coder_type,
+                rnn_type=rnn_type,
+                log_debugging_info=False
+            )
+            rnnCoder.load_data()
+            rnnCoder.print_hyperparams_and_data_info()
+            data = rnnCoder.prepare_expected_output_data()
+            model = rnnCoder.build_model(data)
+            rnnCoder.compress(model, data)
 
-    if op == 'decode':
-        rnnCoder = RnnCoder(
-            name='dEcoder',
-            from_file=f'data/compressed/compressed_{file}_{coder_type}.bin',
-            to_file=f'data/decompressed/decompressed_{file}',
-            encoder_type=coder_type,
-            log_debugging_info=False
-        )
-        rnnCoder.print_hyperparams_and_data_info()
-        model = rnnCoder.build_model()
-        rnnCoder.decompress(model)
+        if op == 'decode':
+            rnnCoder = RnnCoder(
+                name='dEcoder',
+                from_file=f'data/compressed/encoded_{rnn_type}_{coder_type}_{file}.bin',
+                to_file=f'data/decompressed/decoded_{rnn_type}_{coder_type}_{file}',
+                encoder_type=coder_type,
+                rnn_type=rnn_type,
+                log_debugging_info=False
+            )
+            rnnCoder.print_hyperparams_and_data_info()
+            model = rnnCoder.build_model()
+            #rnnCoder.decompress(model)
+        printt(f' -- Done: {rnn_type} - {coder_type} - {op} -> {file}')
+    else:
+        printt(f' -- Started: simple: {coder_type} - {op} -> {file}')
+        if op == 'encode':
+            rnnCoder = RnnCoder(
+                name='eNcoder',
+                from_file=f'data/arbitrary/{file}',
+                to_file=f'data/compressed/simple_encoded__{coder_type}_{file}.bin',
+                encoder_type=coder_type,
+                rnn_type=rnn_type,
+                log_debugging_info=False
+            )
+            rnnCoder.load_data()
+            rnnCoder.print_hyperparams_and_data_info()
+            data = rnnCoder.prepare_expected_output_data()
+            #model = rnnCoder.build_model(data)
+            rnnCoder.compress_simple(data)
 
-    printt(f' -- Done: {coder_type} - {op} -> {file}')
+        printt(f' -- Done: simple: {coder_type} - {op} -> {file}')
 
     close_log_file()
 
